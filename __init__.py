@@ -52,7 +52,6 @@ async def magic_draw(_ctx: AgentCtx, strategy_name: str, send_to_chat: bool = Tr
 
     logger.info(f"开始执行高级绘图策略: {strategy_name}")
     result = await strategy.execute(_ctx, **kwargs)
-    logger.info(f"策略 {strategy_name} 执行完成: {result}")
 
     # 自动发送到聊天
     if send_to_chat:
