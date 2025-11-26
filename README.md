@@ -1,101 +1,131 @@
-# NekroAgent 插件模板
+# 高级绘图插件 (Magic Draw)
 
-> 一个帮助开发者快速创建 NekroAgent 插件的模板仓库。
+> NekroAgent 的高级图像生成插件，为 AI 提供复杂图像处理能力。
 
-## 🚀 快速开始
+## 🎨 插件简介
 
-### 1. 使用模板创建仓库
+高级绘图插件是内置绘图功能的增强补充，通过精心设计的提示词工程和自动化后处理流程，实现普通绘图难以完成的特殊效果。
 
-1. 点击本仓库页面上的 "Use this template" 按钮
-2. 输入你的插件仓库名称，推荐命名格式：`nekro-plugin-[你的插件包名]`
-3. 选择公开或私有仓库
-4. 点击 "Create repository from template" 创建你的插件仓库
+## ✨ 主要功能
 
-### 2. 克隆你的插件仓库
+### 1. GIF 动画生成
 
-```bash
-git clone https://github.com/你的用户名/你的插件仓库名.git
-cd 你的插件仓库名
+生成流畅的循环 GIF 动画，支持像素风格、卡通风格等多种画风。
+
+**特点：**
+
+- 自动生成 15 帧连续动画
+- 智能提取和处理透明背景
+- 支持自定义画面风格
+- 动画可无缝循环播放
+
+**使用示例：**
+
+```
+请帮我生成一个像素风格的 GIF 动画，内容是一只橘猫在奔跑
 ```
 
-### 3. 安装依赖
+### 2. 透明背景 PNG 生成
 
-```bash
-# 安装 uv 包管理工具
-curl -LsSf https://astral.sh/uv/install.sh | sh
+自动生成带透明背景的 PNG 图片，无需手动抠图。
 
-# 根据指引安装 uv 后打开新的终端检查 uv 是否安装成功
-uv --version
+**特点：**
 
-# 同步安装所有依赖（自动创建虚拟环境）
-uv sync
+- AI 自动选择对比色背景
+- 智能识别并移除背景色
+- 边缘处理自然流畅
+- 适合制作贴纸、图标等素材
+
+**使用示例：**
+
+```
+请帮我生成一张透明背景的卡通猫咪图片
 ```
 
-## 📝 插件开发指南
+## 🚀 如何使用
 
-### 插件结构
+### 安装插件
 
-一个标准的 NekroAgent 插件需要在 `__init__.py` 中提供一个 `plugin` 实例，这是插件的核心，用于注册插件功能和配置。
+1. 在 NekroAgent 管理界面进入"插件管理"
+2. 搜索"高级绘图"或"magic-draw"
+3. 点击安装并启用插件
 
-```python
-# 示例插件结构
-plugin = NekroPlugin(
-    name="你的插件名称",  # 插件显示名称
-    module_name="plugin_module_name",  # 插件模块名 (在NekroAI社区需唯一)
-    description="插件描述",  # 插件功能简介
-    version="1.0.0",  # 插件版本
-    author="你的名字",  # 作者信息
-    url="https://github.com/你的用户名/你的插件仓库名",  # 插件仓库链接
-)
-```
+### 配置说明
 
-### 开发功能
+在插件设置中，您需要配置以下选项：
 
-1. **配置插件参数**：使用 `@plugin.mount_config()` 装饰器创建可配置参数
+- **基础绘图模型组**：用于快速、简单的绘图任务
+- **高级绘图模型组**：用于复杂、精细的绘图任务（推荐使用 Gemini 2.5 Flash Image 等高性能模型）
+- **使用流式 API**：启用后可避免长时间处理导致超时，强烈推荐保持开启
+- **请求超时时间**：图像生成需要较长时间，默认 300 秒，根据模型性能可适当调整
+- **GIF 帧边缘过滤像素数**：处理 GIF 时过滤掉边缘的像素数，用于移除 AI 可能生成的分割栅格，默认 4 像素
+- **调试模式**：开启后会在聊天中显示生成的中间图片，方便查看处理过程
 
-```python
-@plugin.mount_config()
-class MyPluginConfig(ConfigBase):
-    """插件配置说明"""
+### 与 AI 对话使用
 
-    API_KEY: str = Field(
-        default="",
-        title="API密钥",
-        description="第三方服务的API密钥",
-    )
-```
+插件安装后，您可以直接通过对话让 AI 使用高级绘图功能：
 
-2. **添加沙盒方法**：使用 `@plugin.mount_sandbox_method()` 添加 AI 可调用的函数
+- "生成一个像素风格的跑步小人 GIF 动画"
+- "画一只透明背景的卡通猫咪"
+- "制作一个循环播放的火焰动画"
 
-```python
-@plugin.mount_sandbox_method(SandboxMethodType.AGENT, name="函数名称", description="函数功能描述")
-async def my_function(_ctx: AgentCtx, param1: str) -> str:
-    """实现插件功能的具体逻辑"""
-    return f"处理结果: {param1}"
-```
+AI 会自动识别需求并调用相应的高级绘图功能。
 
-3. **资源清理**：使用 `@plugin.mount_cleanup_method()` 添加资源清理函数
+## 🔧 技术原理
 
-```python
-@plugin.mount_cleanup_method()
-async def clean_up():
-    """清理资源，如数据库连接等"""
-    logger.info("资源已清理")
-```
+### GIF 动画生成
 
-## 📦 插件发布
+**非透明模式（默认）：**
+1. 通过特殊提示词指导 AI 生成 4×4 网格的序列图（16 格）
+2. 自动切割为 16 帧动画
+3. 裁剪边缘像素（移除可能的分割栅格）
+4. 直接输出不透明的循环 GIF 动画
 
-完成开发后，你可以：
+**透明背景模式（可选）：**
+1. 提示 AI 生成全部 16 帧动画，要求使用纯色背景
+2. 自动切割并裁剪边缘像素（移除分割栅格）
+3. 从所有帧边缘提取最常见颜色作为背景色
+4. 将背景色替换为透明像素，输出透明 GIF
 
-1. 提交到 GitHub 仓库
-2. 发布到 NekroAI 云社区共享给所有用户
+### 透明 PNG 生成
 
-## 🔍 更多资源
+1. 提示 AI 使用与主体对比强烈的纯色背景绘制
+2. 分析图片边缘像素，识别背景色
+3. 将背景色替换为透明像素（支持容差）
+4. 输出透明背景的 PNG 图片
+
+## 📋 系统要求
+
+- NekroAgent 版本 >= 2.0.0
+- Python >= 3.10
+- 需要配置支持图像生成的 AI 模型
+
+## 🎯 推荐模型
+
+为获得最佳效果，推荐使用以下模型：
+
+- **Gemini 2.5 Flash Image Preview**：速度快、效果好、支持精细指令
+- **Gemini 2.0 Flash Exp**：综合性能优秀
+- **DALL-E 3 / Sora Image**：效果出色，价格较高
+
+## ⚠️ 注意事项
+
+1. 高级绘图功能比普通绘图耗时更长，请耐心等待
+2. 生成效果受 AI 模型能力影响，建议使用推荐模型
+3. 调试模式会增加响应时间，正常使用时建议关闭
+4. GIF 动画和透明 PNG 生成依赖 AI 对提示词的理解能力
+
+## 🔗 相关链接
 
 - [NekroAgent 官方文档](https://doc.nekro.ai/)
-- [插件开发详细指南](https://doc.nekro.ai/docs/04_plugin_dev/intro.html)
+- [插件开发指南](https://doc.nekro.ai/docs/04_plugin_dev/intro.html)
+- [问题反馈](https://github.com/KroMiose/nekro-plugin-magic-draw/issues)
 - [社区交流群](https://qm.qq.com/q/hJlRwD17Ae)：636925153
 
-## 📄 许可证
+## 📄 开源协议
 
-MIT
+MIT License
+
+---
+
+**享受创作的乐趣！** 🎨✨

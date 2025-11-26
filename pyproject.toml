@@ -1,14 +1,14 @@
 [project]
-name = "nekro-plugin-template"
-version = "2.0.0"
-description = "NekroAgent 插件模板"
+name = "nekro-plugin-magic-draw"
+version = "1.0.0"
+description = "NekroAgent 高级绘图插件，提供 GIF 动画生成、透明背景 PNG 等复杂图像处理能力"
 authors = [{ name = "KroMiose", email = "li_xiangff@163.com" }]
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = ["nekro-agent>=2.0.0"]
 
 [project.urls]
-Repository = "https://github.com/KroMiose/nekro-plugin-template"
+Repository = "https://github.com/KroMiose/nekro-plugin-magic-draw"
 
 
 [build-system]
