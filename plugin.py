@@ -55,6 +55,12 @@ class MagicDrawConfig(ConfigBase):
         description="处理 GIF 帧时过滤掉边缘的像素数，用于移除可能存在的分割栅格。默认 4 像素。",
     )
 
+    GIF_DEFAULT_FPS: int = Field(
+        default=8,
+        title="GIF 默认帧率",
+        description="GIF 动画的默认帧率（每秒帧数），AI 未指定时使用此值。常用值：10（流畅）、8（适中）、6（慢速）。",
+    )
+
     DEBUG: bool = Field(
         default=False,
         title="调试模式",

@@ -11,25 +11,31 @@ from nekro_agent.api.schemas import AgentCtx
 from nekro_agent.core import logger
 
 from .plugin import config, plugin
-from .strategies import DrawingStrategy, GifGenerationStrategy, TransparentPngStrategy
+from .strategies import (
+    CostumeDesignStrategy,
+    DrawingStrategy,
+    GifGenerationStrategy,
+    TransparentPngStrategy,
+)
 
 # 策略注册表
 STRATEGIES: Dict[str, Type[DrawingStrategy]] = {
     "gif_generation": GifGenerationStrategy,
     "transparent_png": TransparentPngStrategy,
+    "costume_design": CostumeDesignStrategy,
 }
 
 
 @plugin.mount_sandbox_method(
     SandboxMethodType.TOOL,
     name="高级绘图魔法",
-    description="执行高级绘图任务，如生成 GIF 动画、透明背景 PNG 等",
+    description="执行高级绘图任务，如生成 GIF 动画、透明背景 PNG等",
 )
 async def magic_draw(_ctx: AgentCtx, strategy_name: str, send_to_chat: bool = True, **kwargs) -> str:
     """执行高级绘图任务
 
     Args:
-        strategy_name (str): 策略名称，例如 "gif_generation"（GIF动画）或 "transparent_png"（透明PNG）
+        strategy_name (str): 策略名称，例如 "gif_generation"（GIF动画）或 "transparent_png"（透明PNG）...
         send_to_chat (bool): 是否自动发送生成的图片到聊天，默认 True（避免忘记发送）
         **kwargs: 策略所需的具体参数，请参考 AI 提示中注入的策略说明
 

@@ -32,7 +32,8 @@ class GifGenerationStrategy(DrawingStrategy):
         super().__init__(config)
 
     def get_description(self) -> str:
-        return dedent("""
+        return dedent(
+            """
             ### 生成 GIF 动画
             生成像素风格或其他风格的**循环播放** GIF 动画，支持透明背景。
             
@@ -48,6 +49,13 @@ class GifGenerationStrategy(DrawingStrategy):
             
             - `style`: (可选) 画面风格，默认为"pixel art"
             
+            - `fps`: (可选) 帧率，单位：帧每秒（FPS）
+              - 建议范围：6-15
+              - 快速动作（如奔跑、挥动）：12-15 FPS
+              - 中速动作（如走路、呼吸）：8-10 FPS
+              - 慢速动作（如飘动、闪烁）：6-8 FPS
+              - 未指定时使用系统默认值
+            
             - `transparent_background`: (可选) 是否生成透明背景，默认为 False
               - True: 要求 AI 使用纯色背景，自动识别并移除背景色，生成透明 GIF
               - False: 不做背景处理，直接输出不透明 GIF 动画
@@ -61,7 +69,8 @@ class GifGenerationStrategy(DrawingStrategy):
             magic_draw(
                 strategy_name="gif_generation",
                 content="一个像素风格的小人，完整的奔跑动画循环：第1-3帧左腿向前迈步，右臂向后摆；第4-6帧右腿向前迈步，左臂向后摆；第7-9帧左腿再次向前，重复循环。身体略有上下起伏，头部保持稳定，背景是城市街道",
-                style="8-bit pixel art"
+                style="8-bit pixel art",
+                fps=12  # 快速动作用较高帧率
             )
             
             # 使用参考图
@@ -69,28 +78,32 @@ class GifGenerationStrategy(DrawingStrategy):
                 strategy_name="gif_generation",
                 content="基于参考图中的角色形象，制作一个跳跃动画：从蹲下姿势开始蓄力（第1-3帧），然后向上跳起身体伸展（第4-7帧），到达最高点（第8帧），然后下落（第9-12帧），最后落地缓冲回到蹲姿（第13-16帧），形成循环",
                 style="pixel art",
+                fps=8,
                 reference_images=[
                     {"image_path": "shared/character.png", "description": "角色的外观、服装、配色参考"}
                 ]
             )
             
-            # 生成透明背景的 GIF
+            # 生成透明背景的 GIF（慢速动画）
             magic_draw(
                 strategy_name="gif_generation",
                 content="一个燃烧的火焰效果，火焰从底部向上窜起，火苗摇曳，顶部火焰逐渐散开，然后循环",
                 style="pixel art",
+                fps=6,  # 慢速飘动效果
                 transparent_background=True  # 自动移除背景色
             )
             ```
             
             **记住**：content 描述越详细，生成的动画越流畅！必须清楚说明每个阶段的动作变化。
-        """).strip()
+        """,
+        ).strip()
 
     async def execute(
         self,
         ctx: AgentCtx,
         content: str,
         style: str = "pixel art",
+        fps: Optional[int] = None,
         transparent_background: bool = False,
         reference_images: Optional[List[Dict[str, Any]]] = None,
         **kwargs,  # noqa: ARG002
@@ -101,12 +114,22 @@ class GifGenerationStrategy(DrawingStrategy):
             ctx: Agent 上下文
             content: 动画内容描述
             style: 画面风格
+            fps: 帧率（每秒帧数），未指定时使用配置的默认值
             transparent_background: 是否生成透明背景（自动识别并移除背景色）
             reference_images: 参考图片列表，每项包含 image_path 和 description
 
         Returns:
             str: 生成的 GIF 文件路径（沙盒路径）
         """
+
+        # 确定帧率
+        actual_fps = fps if fps is not None else self.config.GIF_DEFAULT_FPS
+        if actual_fps < 1 or actual_fps > 30:
+            logger.warning(f"帧率 {actual_fps} 超出合理范围 (1-30)，使用默认值 {self.config.GIF_DEFAULT_FPS}")
+            actual_fps = self.config.GIF_DEFAULT_FPS
+
+        frame_duration_ms = int(1000 / actual_fps)
+        logger.info(f"GIF 帧率: {actual_fps} FPS (每帧 {frame_duration_ms}ms)")
 
         # 1. 准备参考图片
         ref_images_data: List[Tuple[str, str]] = []
@@ -125,28 +148,27 @@ class GifGenerationStrategy(DrawingStrategy):
 
         # 2. 构造提示词
         ref_prefix = "基于提供的参考图片，" if ref_images_data else ""
-        ref_style_note = (
-            "- 严格保持参考图片的视觉风格、色彩方案、角色特征"
-            if ref_images_data
-            else ""
-        )
-        
+        ref_style_note = "- 严格保持参考图片的视觉风格、色彩方案、角色特征" if ref_images_data else ""
+
         # 根据透明背景模式设置差异化参数
         if transparent_background:
-            background_requirement = dedent("""
+            background_requirement = dedent(
+                """
                 **背景必须是纯色**：选择与主体颜色**强烈对比**的单一纯色作为背景
                 - 主体暖色调 → 使用冷色背景（如深蓝、深绿）
                 - 主体冷色调 → 使用暖色背景（如深红、橙色）
                 - 主体多彩 → 使用深灰或深棕背景
                 - 背景在**所有 16 帧**中保持**完全相同的纯色**
                 - 背景无渐变、无纹理、无装饰、无阴影
-            """).strip()
+            """,
+            ).strip()
             summary_note = "，背景必须是纯色"
         else:
             background_requirement = "背景元素（环境、装饰物）在所有 16 帧中保持**完全一致**"
             summary_note = ""
-        
-        prompt = dedent(f"""
+
+        prompt = dedent(
+            f"""
             【专业动画序列帧制作任务】
             
             {ref_prefix}创作一个 {style} 风格的**循环动画**。
@@ -180,7 +202,7 @@ class GifGenerationStrategy(DrawingStrategy):
             3. **循环衔接设计**：
                - 第 1 帧：动作循环的起点状态
                - 第 2-15 帧：动作连续变化过程（严格按内容描述绘制）
-               - 第 16 帧：回到起点状态（应能自然过渡到第 1 帧）
+               - 第 16 帧：回到起点状态（应能自然过渡到第 1 帧，但不是重复第 1 帧）
                - **测试标准**：将第 16 帧与第 1 帧连接时，动作应该流畅连贯无跳跃
             
             4. **视觉稳定性要求**：
@@ -196,11 +218,12 @@ class GifGenerationStrategy(DrawingStrategy):
             ## 技术规格
             - 画布：正方形 1:1 比例
             - 分辨率：每格尺寸 = 画布尺寸 ÷ 4
-            - 帧率：10 FPS（每帧 100ms）
+            - 帧率：{actual_fps} FPS（每帧 {frame_duration_ms}ms）
             - 对齐：像素级精准对齐
             
             请严格按照上述要求制作 16 帧**各不相同**且能**循环播放**的动画序列图{summary_note}。
-        """).strip()
+        """,
+        ).strip()
 
         logger.info(f"GIF 生成提示词: {prompt}")
 
@@ -239,18 +262,17 @@ class GifGenerationStrategy(DrawingStrategy):
 
         # 6. 处理帧并生成 GIF
         edge_filter = self.config.GIF_EDGE_FILTER_PIXELS
-        
+
         # 先裁剪边缘（移除可能的分割栅格）
-        animation_frames = [
-            self._filter_frame_edges(frame, edge_filter) for frame in frames
-        ]
+        animation_frames = [self._filter_frame_edges(frame, edge_filter) for frame in frames]
         logger.info(f"已裁剪所有帧的边缘 {edge_filter} 像素")
-        
+
         # 根据模式决定是否处理透明背景
         if transparent_background:
             # 透明模式：提取背景色并替换为透明
             transparency_color = self._extract_common_background_color(
-                animation_frames, edge_filter,
+                animation_frames,
+                edge_filter,
             )
             if transparency_color:
                 logger.info(
@@ -270,7 +292,7 @@ class GifGenerationStrategy(DrawingStrategy):
         create_gif_from_frames(
             animation_frames,
             temp_gif_path,
-            duration=100,  # 10fps = 100ms/帧
+            duration=frame_duration_ms,  # 根据帧率计算的每帧时长
             transparency_color=transparency_color,
             tolerance=10,  # 容差
         )
@@ -285,17 +307,17 @@ class GifGenerationStrategy(DrawingStrategy):
     @staticmethod
     def _filter_frame_edges(frame: Image.Image, edge_pixels: int) -> Image.Image:
         """过滤帧的边缘像素，移除可能的分割栅格
-        
+
         Args:
             frame: 原始帧
             edge_pixels: 要过滤的边缘像素数
-            
+
         Returns:
             过滤边缘后的帧
         """
         if edge_pixels <= 0:
             return frame
-        
+
         width, height = frame.size
         # 裁剪掉边缘
         crop_box = (
@@ -311,10 +333,10 @@ class GifGenerationStrategy(DrawingStrategy):
         pixel: float | tuple[int, ...] | tuple[float, ...] | None,
     ) -> Tuple[int, int, int]:
         """将 getpixel 返回的各种类型统一转换为 RGB 元组
-        
+
         Args:
             pixel: getpixel 返回值，可能是 int/float（灰度）或 tuple（RGB/RGBA）
-            
+
         Returns:
             RGB 元组
         """
@@ -332,70 +354,72 @@ class GifGenerationStrategy(DrawingStrategy):
         return (0, 0, 0)
 
     def _extract_common_background_color(
-        self, frames: List[Image.Image], filtered_edge_pixels: int = 0, tolerance: int = 16,
+        self,
+        frames: List[Image.Image],
+        filtered_edge_pixels: int = 0,
+        tolerance: int = 16,
     ) -> Optional[Tuple[int, int, int]]:
         """从所有帧的边缘提取共同的背景色
-        
+
         Args:
             frames: 帧列表（PIL Image 对象，应该已经过边缘过滤）
             filtered_edge_pixels: 边缘过滤像素数（用于日志记录）
             tolerance: 颜色容差，小于此值视为同一颜色
-            
+
         Returns:
             RGB 元组，如果未能提取到有效背景色则返回 None
         """
         logger.info(
-            f"开始从 {len(frames)} 帧中提取共同背景色"
-            f"（已过滤边缘 {filtered_edge_pixels} 像素，容差={tolerance}）",
+            f"开始从 {len(frames)} 帧中提取共同背景色（已过滤边缘 {filtered_edge_pixels} 像素，容差={tolerance}）",
         )
-        
+
         # 收集所有帧边缘像素
         all_edge_pixels: List[Tuple[int, int, int]] = []
-        
+
         for idx, frame in enumerate(frames):
             if frame.mode != "RGB":
                 frame = frame.convert("RGB")
-            
+
             width, height = frame.size
             edge_pixels: List[Tuple[int, int, int]] = []
-            
+
             # 提取四边边缘
             # 上边缘
             for x in range(width):
                 pixel = frame.getpixel((x, 0))
                 rgb_pixel = self._normalize_pixel(pixel)
                 edge_pixels.append(rgb_pixel)
-            
+
             # 下边缘
             for x in range(width):
                 pixel = frame.getpixel((x, height - 1))
                 rgb_pixel = self._normalize_pixel(pixel)
                 edge_pixels.append(rgb_pixel)
-            
+
             # 左边缘（不包括角点，避免重复）
             for y in range(1, height - 1):
                 pixel = frame.getpixel((0, y))
                 rgb_pixel = self._normalize_pixel(pixel)
                 edge_pixels.append(rgb_pixel)
-            
+
             # 右边缘（不包括角点，避免重复）
             for y in range(1, height - 1):
                 pixel = frame.getpixel((width - 1, y))
                 rgb_pixel = self._normalize_pixel(pixel)
                 edge_pixels.append(rgb_pixel)
-            
+
             all_edge_pixels.extend(edge_pixels)
             logger.debug(f"第 {idx + 1} 帧提取了 {len(edge_pixels)} 个边缘像素")
-        
+
         logger.info(f"总共提取了 {len(all_edge_pixels)} 个边缘像素")
-        
+
         if not all_edge_pixels:
             logger.warning("未提取到任何边缘像素")
             return None
-        
+
         # 聚类：将相似的颜色归为一组
         color_clusters: Dict[Tuple[int, int, int], int] = {}
-        
+
         for pixel in all_edge_pixels:
             # 查找是否有接近的聚类中心
             found_cluster = False
@@ -406,28 +430,28 @@ class GifGenerationStrategy(DrawingStrategy):
                     color_clusters[center] += 1
                     found_cluster = True
                     break
-            
+
             # 没有找到接近的聚类，创建新聚类
             if not found_cluster:
                 color_clusters[pixel] = 1
-        
+
         # 找出出现频率最高的聚类
         if not color_clusters:
             logger.warning("颜色聚类失败")
             return None
-        
+
         most_common_color = max(color_clusters.items(), key=lambda x: x[1])
         bg_color, count = most_common_color
-        
+
         percentage = (count / len(all_edge_pixels)) * 100
         logger.info(
             f"最常见背景色 RGB{bg_color}，出现 {count} 次（占边缘像素的 {percentage:.1f}%）",
         )
-        
+
         # 验证：如果最常见的颜色占比太低，可能不是有效的背景色
         if percentage < 30:
             logger.warning(
                 f"最常见颜色占比仅 {percentage:.1f}%，可能不是纯色背景，建议检查图像",
             )
-        
+
         return bg_color
